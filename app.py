@@ -14,7 +14,7 @@ import io
 
 # ==================== 1. 配置 DeepSeek 客户端 ====================
 client = OpenAI(
-    api_key=st.secrets["DEEPSEEK_API_KEY"],   # 从 secrets 读取
+    api_key=st.secrets["DEEPSEEK_API_KEY"],  # 从 secrets 读取
     base_url="https://api.deepseek.com"
 )
 
@@ -24,6 +24,7 @@ SUB_OPTIONS = {
     "人工智能": ["AI Agent 开发", "算法", "数据标注与模型训练", "模型部署"],
     "低空经济": ["无人机教学", "无人机应用", "飞行控制", "无人机部署", "无人机维修"]
 }
+
 
 # ==================== 3. 文件解析函数（基于文件大小判断截断） ====================
 def extract_text_from_file(uploaded_file):
@@ -62,15 +63,15 @@ def extract_text_from_file(uploaded_file):
         st.error(f"文件读取失败：{e}")
         return None
 
-    # ========== 修改点：根据文件大小决定是否截断 ==========
+    # 根据文件大小决定是否截断
     file_size = uploaded_file.size  # 字节数
-    max_size = 200 * 1024 * 1024    # 200MB
+    max_size = 200 * 1024 * 1024  # 200MB
     if file_size > max_size:
         st.info("文件超过200MB，内容过长，已自动截取前3000字符作为参考。")
         if len(text) > 3000:
             text = text[:3000] + "...(内容已截断)"
-    # 否则返回完整文本（不截断）
     return text
+
 
 # ==================== 4. 网页标题 ====================
 st.title("智能PPT生成器")
@@ -138,10 +139,19 @@ page_num = st.number_input(
     "生成页数", min_value=3, max_value=80, value=None, step=1, placeholder="请输入PPT页数"
 )
 
+# ==================== 🆕 新增：补充需求输入框（可选） ====================
+extra_requirements = st.text_area(
+    "补充需求（可选）",
+    placeholder="请输入补充需求",
+    height=100,
+    help="您可以在这里输入额外的要求，例如：重点突出技术路线、增加对比图表等。"
+)
+
+
 # ==================== 6. 构造发送给 AI 的指令 ====================
 def build_user_prompt(school_name, school_level, need_nvidia,
                       domain, sub_domain, budget, cost, page_num,
-                      reference_texts=None):
+                      reference_texts=None, extra_requirements=""):
     nvidia_text = need_nvidia if need_nvidia else "否"
     prompt = f"""请为以下需求生成一份PPT大纲：
 - 学校名称：{school_name}
@@ -157,7 +167,12 @@ def build_user_prompt(school_name, school_level, need_nvidia,
     if reference_texts:
         combined_ref = "\n\n".join(reference_texts)
         prompt += f"\n\n【以下为用户提供的参考资料，请严格基于这些内容生成PPT】\n{combined_ref}"
+
+    if extra_requirements.strip():
+        prompt += f"\n\n【用户额外补充需求】\n{extra_requirements.strip()}"
+
     return prompt
+
 
 # ==================== 7. 调用 DeepSeek 生成大纲 ====================
 def generate_ppt_outline(full_user_prompt):
@@ -193,6 +208,7 @@ def generate_ppt_outline(full_user_prompt):
         st.error(f"调用 DeepSeek 出错: {e}")
         return None
 
+
 # ==================== 8. 根据 JSON 生成 PPT 对象 ====================
 def build_pptx_from_json(data):
     prs = Presentation()
@@ -212,6 +228,7 @@ def build_pptx_from_json(data):
                 p.text = point
                 p.level = 1
     return prs
+
 
 # ==================== 9. 在 PPT 中插入场地地形图片 ====================
 def add_image_slide(prs, image_file):
@@ -233,6 +250,7 @@ def add_image_slide(prs, image_file):
     slide.shapes.add_picture(tmp_path, Inches(1), Inches(1.8), width=Inches(8))
     return prs
 
+
 # ==================== 10. 生成按钮与主逻辑 ====================
 if st.button("生成 PPT"):
     if not school_name.strip():
@@ -246,7 +264,8 @@ if st.button("生成 PPT"):
             user_prompt = build_user_prompt(
                 school_name, school_level, need_nvidia,
                 domain, sub_domain, budget, cost, page_num,
-                reference_texts=reference_texts if uploaded_files else None
+                reference_texts=reference_texts if uploaded_files else None,
+                extra_requirements=extra_requirements
             )
             outline = generate_ppt_outline(user_prompt)
 
