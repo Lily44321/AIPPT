@@ -242,7 +242,7 @@ if st.button("生成 PPT"):
     elif page_num < 3:
         st.warning("页数至少为3页")
     else:
-        with st.spinner("DeepSeek 正在为您定制内容..."):
+        with st.spinner("正在为您定制内容..."):
             user_prompt = build_user_prompt(
                 school_name, school_level, need_nvidia,
                 domain, sub_domain, budget, cost, page_num,
