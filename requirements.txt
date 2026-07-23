@@ -1,3 +1,7 @@
 streamlit
 python-pptx
 openai
+python-docx
+openpyxl
+pandas
+PyPDF2
