@@ -25,9 +25,9 @@ SUB_OPTIONS = {
     "低空经济": ["无人机教学", "无人机应用", "飞行控制", "无人机部署", "无人机维修"]
 }
 
-# ==================== 3. 文件解析函数 ====================
+# ==================== 3. 文件解析函数（基于文件大小判断截断） ====================
 def extract_text_from_file(uploaded_file):
-    """根据文件扩展名提取文本内容，返回字符串"""
+    """根据文件扩展名提取文本内容，如果文件超过200MB则截断前3000字符"""
     ext = os.path.splitext(uploaded_file.name)[1].lower()
     text = ""
     try:
@@ -62,10 +62,14 @@ def extract_text_from_file(uploaded_file):
         st.error(f"文件读取失败：{e}")
         return None
 
-    # 防止文本过长，超过 token 限制，截取前 3000 字符
-    if len(text) > 3000:
-        st.info("文件内容较长，已自动截取前 3000 字符作为参考。")
-        text = text[:3000] + "...(内容已截断)"
+    # ========== 修改点：根据文件大小决定是否截断 ==========
+    file_size = uploaded_file.size  # 字节数
+    max_size = 200 * 1024 * 1024    # 200MB
+    if file_size > max_size:
+        st.info("文件超过200MB，内容过长，已自动截取前3000字符作为参考。")
+        if len(text) > 3000:
+            text = text[:3000] + "...(内容已截断)"
+    # 否则返回完整文本（不截断）
     return text
 
 # ==================== 4. 网页标题 ====================
@@ -76,7 +80,7 @@ st.markdown("填写以下信息，AI将为您自动生成定制化PPT。")
 col1, col2 = st.columns(2)
 
 with col1:
-    school_name = st.text_input("学校名称", placeholder="请输入学校名称")  # 修改1：增加placeholder
+    school_name = st.text_input("学校名称", placeholder="请输入学校名称")
     school_level = st.selectbox(
         "学校层次",
         ["985", "211", "双一流", "重点一本", "公办本科", "民办本科", "专科"],
@@ -85,7 +89,6 @@ with col1:
     )
 
 with col2:
-    # 原 checkbox 已移除，改为后面的 selectbox
     pass
 
 domain = st.selectbox(
@@ -95,7 +98,6 @@ domain = st.selectbox(
     placeholder="请选择领域"
 )
 
-# 动态更新细分方向
 sub_options = SUB_OPTIONS.get(domain, []) if domain else []
 sub_domain = st.selectbox(
     "细分方向",
@@ -104,7 +106,6 @@ sub_domain = st.selectbox(
     placeholder="请先选择领域" if not domain else "请选择细分方向"
 )
 
-# 英伟达是否体现（选择是/否）
 need_nvidia = st.selectbox(
     "是否体现英伟达技术/合作",
     ["是", "否"],
@@ -119,7 +120,6 @@ uploaded_image = st.file_uploader("场地地形图片（可选）", type=["png",
 if uploaded_image:
     st.image(uploaded_image, caption="预览上传图片", width=300)
 
-# 多文件上传（参考资料）
 uploaded_files = st.file_uploader(
     "上传参考资料（Word/PPT/Excel/PDF/TXT/CSV，可多选）",
     type=["docx", "pptx", "xls", "xlsx", "pdf", "txt", "csv"],
@@ -134,16 +134,15 @@ if uploaded_files:
             if content:
                 reference_texts.append(f"【文件：{file.name}】\n{content}")
 
-# 页数选择放在按钮上方
 page_num = st.number_input(
-    "生成页数", min_value=3, max_value=80, value=None, step=1, placeholder="请输入PPT页数"  # 修改2：去掉默认值，增加placeholder
+    "生成页数", min_value=3, max_value=80, value=None, step=1, placeholder="请输入PPT页数"
 )
 
 # ==================== 6. 构造发送给 AI 的指令 ====================
 def build_user_prompt(school_name, school_level, need_nvidia,
                       domain, sub_domain, budget, cost, page_num,
                       reference_texts=None):
-    nvidia_text = need_nvidia if need_nvidia else "否"  # 若未选，默认"否"
+    nvidia_text = need_nvidia if need_nvidia else "否"
     prompt = f"""请为以下需求生成一份PPT大纲：
 - 学校名称：{school_name}
 - 学校层次：{school_level if school_level else '未指定'}
@@ -168,7 +167,7 @@ def generate_ppt_outline(full_user_prompt):
 2. JSON结构：{"title": "...", "slides": [{"heading": "...", "content": ["要点1","要点2"]}, ...]}
 3. slides的数量必须严格等于用户要求的页数。
 4. 内容要针对学校层次、预算成本、领域细分进行定制，若需体现英伟达则自然融入。
-5. 必须包含一页“场地地形”，heading为“场地地形”，content可以为“（此处插入场地地形图片）”等简要说明。
+5. 必须包含一页"场地地形"，heading为"场地地形"，content可以为"（此处插入场地地形图片）"等简要说明。
 """
     try:
         response = client.chat.completions.create(
@@ -181,7 +180,6 @@ def generate_ppt_outline(full_user_prompt):
             max_tokens=2500
         )
         raw = response.choices[0].message.content
-        # 清理 Markdown 代码块
         if raw.startswith("```json"):
             raw = raw[7:-3].strip()
         elif raw.startswith("```"):
@@ -200,9 +198,9 @@ def build_pptx_from_json(data):
     prs = Presentation()
     for i, slide_data in enumerate(data["slides"]):
         if i == 0:
-            layout = prs.slide_layouts[0]  # 封面
+            layout = prs.slide_layouts[0]
         else:
-            layout = prs.slide_layouts[1]  # 标题+内容
+            layout = prs.slide_layouts[1]
         slide = prs.slides.add_slide(layout)
         slide.shapes.title.text = slide_data["heading"]
         if len(slide.placeholders) > 1:
@@ -217,11 +215,9 @@ def build_pptx_from_json(data):
 
 # ==================== 9. 在 PPT 中插入场地地形图片 ====================
 def add_image_slide(prs, image_file):
-    """在 PPT 最后插入一张带标题的图片页"""
-    layout = prs.slide_layouts[6]  # 空白版式
+    layout = prs.slide_layouts[6]
     slide = prs.slides.add_slide(layout)
 
-    # 添加标题
     left, top, width, height = Inches(1), Inches(0.5), Inches(8), Inches(1)
     txBox = slide.shapes.add_textbox(left, top, width, height)
     tf = txBox.text_frame
@@ -230,12 +226,10 @@ def add_image_slide(prs, image_file):
     p.font.size = Pt(28)
     p.font.bold = True
 
-    # 保存上传的图片到临时文件
     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
         tmp.write(image_file.read())
         tmp_path = tmp.name
 
-    # 插入图片
     slide.shapes.add_picture(tmp_path, Inches(1), Inches(1.8), width=Inches(8))
     return prs
 
@@ -243,7 +237,7 @@ def add_image_slide(prs, image_file):
 if st.button("生成 PPT"):
     if not school_name.strip():
         st.warning("请输入学校名称")
-    elif page_num is None:  # 新增：检查页数是否为空
+    elif page_num is None:
         st.warning("请输入PPT页数")
     elif page_num < 3:
         st.warning("页数至少为3页")
