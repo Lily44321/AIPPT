@@ -9,10 +9,8 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from copy import deepcopy
 
-# 导入学长代码中的核心函数
-import sys
-sys.path.append(os.path.join(os.getcwd(), "skill"))
-from turing_ppt_editor import (
+# 直接从 skill 文件夹导入（不用 sys.path）
+from skill.turing_ppt_editor import (
     set_cover_title,
     set_cover_school,
     copy_external_slide,
